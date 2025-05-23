@@ -2,3 +2,14 @@ venv/
 *.json 
 __pycache__/
 .env
+
+*.pickle 
+
+*.log
+
+*.docx
+*.pdf
+*.txt
+*.csv
+*.xlsx
+*.xls
