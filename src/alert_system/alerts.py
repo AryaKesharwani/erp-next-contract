@@ -1,16 +1,13 @@
 """
 Alert system for Contract Intelligence Agent
 
-This module handles the generation and sending of alerts for contract expirations,
+This module handles the generation of alerts for contract expirations,
 processing errors, and other notifications.
 """
 
 import os
 import logging
 import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 
 from src.utils.config import Config
@@ -21,19 +18,12 @@ from src.erpnext_integration.api import ERPNextAPI
 logger = logging.getLogger("contract_agent.alert_system")
 
 class AlertSystem:
-    """Generate and send alerts for contract management"""
+    """Generate alerts for contract management"""
     
     def __init__(self):
         """Initialize the alert system with configuration"""
         self.config = Config()
         self.erpnext_api = ERPNextAPI()
-        
-        # SMTP configuration
-        self.smtp_server = self.config.smtp_server
-        self.smtp_port = self.config.smtp_port
-        self.smtp_username = self.config.smtp_username
-        self.smtp_password = self.config.smtp_password
-        self.from_email = self.config.alert_from_email
         
         # Alert periods (days before expiration)
         self.alert_periods = self.config.alert_periods
@@ -41,54 +31,6 @@ class AlertSystem:
         # Directory to store alert logs
         self.log_dir = os.path.join(os.getcwd(), "alert_logs")
         ensure_directory_exists(self.log_dir)
-    
-    def _send_email(self, to_emails, subject, body_html, body_text=None):
-        """
-        Send an email alert
-        
-        Args:
-            to_emails (list): List of recipient email addresses
-            subject (str): Email subject
-            body_html (str): HTML email body
-            body_text (str, optional): Plain text email body
-        
-        Returns:
-            bool: True if sent successfully, False otherwise
-        """
-        if not self.smtp_server or not self.smtp_username or not self.smtp_password:
-            logger.warning("SMTP configuration incomplete, cannot send email alerts")
-            return False
-        
-        if not to_emails:
-            logger.warning("No recipients specified for email alert")
-            return False
-        
-        try:
-            # Create multipart message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = ", ".join(to_emails)
-            
-            # Add text body if provided
-            if body_text:
-                msg.attach(MIMEText(body_text, 'plain'))
-            
-            # Add HTML body
-            msg.attach(MIMEText(body_html, 'html'))
-            
-            # Connect to SMTP server and send
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
-                server.send_message(msg)
-            
-            logger.info(f"Sent email alert '{subject}' to {len(to_emails)} recipients")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error sending email alert: {str(e)}")
-            return False
     
     def _create_alert_record(self, alert_type, contract_id, client_id, message, priority="medium", days_until_expiration=None):
         """
@@ -145,6 +87,7 @@ class AlertSystem:
             f"{alert_type}_{timestamp}.json"
         )
         save_json(data, log_path)
+        logger.info(f"Alert logged to {log_path}")
     
     def generate_expiration_alert(self, contract, days_until_expiration):
         """
@@ -195,35 +138,11 @@ class AlertSystem:
             "timestamp": datetime.now().isoformat()
         })
         
-        # TODO: Get email recipients from ERPNext based on alert type
-        # For now, assume a default recipient
-        to_emails = ["legal@example.com"]
-        
-        # Create email subject and body
-        subject = f"Contract Expiration Alert: {contract_name} - {days_until_expiration} days remaining"
-        
-        body_html = f"""
-        <html>
-        <body>
-            <h2>Contract Expiration Alert</h2>
-            <p>This is an automated alert from the Contract Intelligence Agent.</p>
-            <p><strong>Contract:</strong> {contract_name}</p>
-            <p><strong>Type:</strong> {contract_type}</p>
-            <p><strong>Expiration Date:</strong> {expiration_date}</p>
-            <p><strong>Days Remaining:</strong> {days_until_expiration}</p>
-            <p><strong>Auto-renewal:</strong> {"Yes" if contract.get("auto_renewal") else "No"}</p>
-            <hr>
-            <p>Please take appropriate action regarding this contract.</p>
-        </body>
-        </html>
-        """
-        
-        # Send email alert
-        self._send_email(to_emails, subject, body_html)
+        logger.info(f"Generated expiration alert for contract {contract_name} - {days_until_expiration} days remaining")
     
     def send_error_alert(self, document, error_message):
         """
-        Send an alert for a processing error
+        Log an alert for a processing error
         
         Args:
             document (dict): Document metadata
@@ -241,28 +160,7 @@ class AlertSystem:
             "timestamp": datetime.now().isoformat()
         })
         
-        # TODO: Get email recipients from ERPNext based on alert type
-        # For now, assume a default recipient
-        to_emails = ["system_admin@example.com"]
-        
-        # Create email subject and body
-        subject = f"Document Processing Error: {document_name}"
-        
-        body_html = f"""
-        <html>
-        <body>
-            <h2>Document Processing Error</h2>
-            <p>This is an automated alert from the Contract Intelligence Agent.</p>
-            <p><strong>Document:</strong> {document_name}</p>
-            <p><strong>Error:</strong> {error_message}</p>
-            <hr>
-            <p>Please review the error and take appropriate action.</p>
-        </body>
-        </html>
-        """
-        
-        # Send email alert
-        self._send_email(to_emails, subject, body_html)
+        logger.info(f"Logged processing error for document {document_name}")
     
     def generate_alerts(self, erpnext_record):
         """
@@ -317,7 +215,7 @@ class AlertSystem:
             
         except Exception as e:
             logger.error(f"Error checking contract expirations: {str(e)}")
-            # Still try to send an admin alert about the failure
+            # Log a system error alert
             self._log_alert("system_error", {
                 "error_message": f"Error checking contract expirations: {str(e)}",
                 "timestamp": datetime.now().isoformat()
