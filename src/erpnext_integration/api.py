@@ -164,9 +164,10 @@ class ERPNextAPI:
             # Create data for the client record
             client_data = {
                 "doctype": "Client",
+                "client_id": f"CLI-{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 "client_name": client_info["primary_name"],
                 "client_aliases": ",".join(client_info.get("alternative_names", [])),
-                "status": "active",
+                "status": "Active",
                 "created_date": datetime.now().strftime("%Y-%m-%d")
             }
             
@@ -180,7 +181,7 @@ class ERPNextAPI:
                 "client_id": response.get("data", {}).get("name"),
                 "client_name": client_info["primary_name"],
                 "client_aliases": client_info.get("alternative_names", []),
-                "status": "active",
+                "status": "Active",
                 "created_date": datetime.now().strftime("%Y-%m-%d")
             }
             
@@ -210,15 +211,16 @@ class ERPNextAPI:
             
             # Prepare contract data
             contract_data = {
-                "doctype": "Contract",
+                "doctype": "ContractCustom",
+                "contract_id": f"CON-{datetime.now().strftime('%Y%m%d%H%M%S')}",
                 "client_id": client_id,
                 "contract_type": document_type,
                 "contract_name": os.path.basename(document_path),
                 "effective_date": contract_details.get("effective_date"),
                 "expiration_date": contract_details.get("expiration_date"),
-                "auto_renewal": True if contract_details.get("auto_renewal", {}).get("enabled") else False,
+                "auto_renewal": "Yes" if contract_details.get("auto_renewal", {}).get("enabled") else "No",
                 "renewal_terms": contract_details.get("auto_renewal", {}).get("terms"),
-                "status": "active",
+                "status": "Active",
                 "extraction_confidence": extraction_result.get("extraction_confidence", {}).get("overall", 0),
                 "extraction_log": json.dumps(extraction_result),
                 "created_date": datetime.now().strftime("%Y-%m-%d"),
@@ -227,9 +229,23 @@ class ERPNextAPI:
             
             # Add type-specific fields
             if document_type == "SoW":
+                # Map SoW type values to match doctype options
+                sow_type_mapping = {
+                    "Time & Material": "T&M",
+                    "Time and Material": "T&M", 
+                    "T&M": "T&M",
+                    "Retainer": "Retainer",
+                    "Fixed Cost": "Fixed Cost",
+                    "Fixed Price": "Fixed Cost",
+                    "Fixed": "Fixed Cost"
+                }
+                
+                raw_sow_type = type_specific_details.get("sow_type", "")
+                mapped_sow_type = sow_type_mapping.get(raw_sow_type, "T&M")  # Default to T&M
+                
                 contract_data.update({
                     "contract_value": type_specific_details.get("total_contract_value"),
-                    "sow_type": type_specific_details.get("sow_type"),
+                    "sow_type": mapped_sow_type,
                     "payment_terms": type_specific_details.get("payment_schedule"),
                     "deliverables": json.dumps(type_specific_details.get("deliverables", [])),
                     "parent_contract_id": type_specific_details.get("parent_msa_reference")
@@ -239,7 +255,7 @@ class ERPNextAPI:
             # This typically requires a multipart form upload which depends on ERPNext's API
             
             # Create the contract in ERPNext
-            response = self._make_request("POST", "Contract", data=contract_data)
+            response = self._make_request("POST", "ContractCustom", data=contract_data)
             
             logger.info(f"Created new contract: {contract_data['contract_name']} for client {client_id}")
             
@@ -251,7 +267,7 @@ class ERPNextAPI:
                 "contract_name": contract_data["contract_name"],
                 "effective_date": contract_data["effective_date"],
                 "expiration_date": contract_data["expiration_date"],
-                "status": "active"
+                "status": "Active"
             }
             
             return created_contract
@@ -319,7 +335,7 @@ class ERPNextAPI:
                 "filters": json.dumps([
                     ["expiration_date", ">=", today.strftime("%Y-%m-%d")],
                     ["expiration_date", "<=", future_date.strftime("%Y-%m-%d")],
-                    ["status", "=", "active"]
+                    ["status", "=", "Active"]
                 ]),
                 "fields": json.dumps([
                     "name", "contract_id", "client_id", "contract_type", 
@@ -328,7 +344,7 @@ class ERPNextAPI:
                 ])
             }
             
-            response = self._make_request("GET", "Contract", params=params)
+            response = self._make_request("GET", "ContractCustom", params=params)
             
             contracts = []
             for contract_data in response.get("data", []):
