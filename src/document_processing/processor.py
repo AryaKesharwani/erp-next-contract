@@ -9,6 +9,7 @@ import os
 import logging
 import json
 from datetime import datetime
+from colorama import init, Fore, Style
 
 import PyPDF2
 import docx
@@ -17,8 +18,33 @@ import google.generativeai as genai
 from src.utils.config import Config
 from src.utils.helpers import get_file_extension, save_json, ensure_directory_exists
 
-# Logger setup
+# Initialize colorama
+init()
+
+# Logger setup with colors
 logger = logging.getLogger("contract_agent.document_processing")
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors"""
+    
+    def format(self, record):
+        if record.levelno >= logging.ERROR:
+            color = Fore.RED
+        elif record.levelno >= logging.WARNING:
+            color = Fore.YELLOW
+        elif record.levelno >= logging.INFO:
+            color = Fore.GREEN
+        else:
+            color = Fore.WHITE
+            
+        record.msg = f"{color}{record.msg}{Style.RESET_ALL}"
+        return super().format(record)
+
+# Configure logger with colored formatter
+handler = logging.StreamHandler()
+handler.setFormatter(ColoredFormatter('%(asctime)s [%(levelname)s] %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 class DocumentProcessor:
     """Process documents and extract contract information using LLMs"""

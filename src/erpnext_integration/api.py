@@ -12,12 +12,39 @@ import json
 import base64
 from datetime import datetime, timedelta
 import urllib.parse
+from colorama import Fore, Style, init
 
 from src.utils.config import Config
 from src.utils.helpers import parse_date, save_json, ensure_directory_exists
 
-# Logger setup
+# Initialize colorama
+init()
+
+# Logger setup with colors
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors for different log levels"""
+    
+    COLORS = {
+        'DEBUG': Fore.BLUE,
+        'INFO': Fore.GREEN,
+        'WARNING': Fore.YELLOW,
+        'ERROR': Fore.RED,
+        'CRITICAL': Fore.RED + Style.BRIGHT
+    }
+    
+    def format(self, record):
+        if not record.exc_info:
+            level = record.levelname
+            if level in self.COLORS:
+                record.msg = f"{self.COLORS[level]}{record.msg}{Style.RESET_ALL}"
+        return super().format(record)
+
+# Configure logger with colored output
 logger = logging.getLogger("contract_agent.erpnext_integration")
+handler = logging.StreamHandler()
+handler.setFormatter(ColoredFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 class ERPNextAPI:
     """Interface for the ERPNext API"""
