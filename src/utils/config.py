@@ -34,6 +34,7 @@ class Config:
         
         # Client mapping configuration
         self.fuzzy_match_threshold = float(os.getenv("FUZZY_MATCH_THRESHOLD", "80.0"))
+        self.client_mapping_confidence_threshold = float(os.getenv("CLIENT_MAPPING_CONFIDENCE_THRESHOLD", "0.75"))
         
         # Document processing configuration
         self.extraction_confidence_threshold = float(os.getenv("EXTRACTION_CONFIDENCE_THRESHOLD", "0.7"))

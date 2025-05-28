@@ -188,6 +188,56 @@ class ERPNextAPI:
             dict: Created client record
         """
         try:
+            # First, check if a similar client already exists
+            existing_clients = self.get_clients()
+            primary_name = client_info["primary_name"]
+            
+            # Normalize the primary name for comparison
+            def normalize_name(name):
+                if not name:
+                    return ""
+                name = name.lower()
+                replacements = [
+                    (" inc.", ""), (" incorporated", ""), (" corp.", ""), (" corporation", ""),
+                    (" llc", ""), (" l.l.c.", ""), (" ltd", ""), (" limited", ""), 
+                    (" gmbh", ""), (" co.", ""), (" company", ""), (",", ""), (".", "")
+                ]
+                for old, new in replacements:
+                    name = name.replace(old, new)
+                return name.strip()
+            
+            normalized_primary = normalize_name(primary_name)
+            
+            # Check for exact matches (normalized)
+            for existing_client in existing_clients:
+                existing_normalized = normalize_name(existing_client.get("client_name", ""))
+                if normalized_primary == existing_normalized:
+                    logger.warning(f"Client '{primary_name}' already exists as '{existing_client['client_name']}' (ID: {existing_client['client_id']})")
+                    # Return the existing client instead of creating a duplicate
+                    return {
+                        "client_id": existing_client["client_id"],
+                        "client_name": existing_client["client_name"],
+                        "client_aliases": existing_client.get("client_aliases", []),
+                        "status": existing_client.get("status", "Active"),
+                        "created_date": existing_client.get("created_date"),
+                        "is_existing": True  # Flag to indicate this was not newly created
+                    }
+                
+                # Also check aliases
+                existing_aliases = existing_client.get("client_aliases", [])
+                for alias in existing_aliases:
+                    if normalized_primary == normalize_name(alias):
+                        logger.warning(f"Client '{primary_name}' already exists as alias of '{existing_client['client_name']}' (ID: {existing_client['client_id']})")
+                        return {
+                            "client_id": existing_client["client_id"],
+                            "client_name": existing_client["client_name"],
+                            "client_aliases": existing_client.get("client_aliases", []),
+                            "status": existing_client.get("status", "Active"),
+                            "created_date": existing_client.get("created_date"),
+                            "is_existing": True
+                        }
+            
+            # No exact match found, proceed with creation
             # Create data for the client record
             client_data = {
                 "doctype": "Client",
@@ -209,7 +259,8 @@ class ERPNextAPI:
                 "client_name": client_info["primary_name"],
                 "client_aliases": client_info.get("alternative_names", []),
                 "status": "Active",
-                "created_date": datetime.now().strftime("%Y-%m-%d")
+                "created_date": datetime.now().strftime("%Y-%m-%d"),
+                "is_existing": False  # Flag to indicate this was newly created
             }
             
             return created_client
@@ -320,13 +371,17 @@ class ERPNextAPI:
             client_id = client_mapping_result.get("matched_client_id")
             
             if client_id is None:
-                # Create new client
+                # Create new client (with duplicate prevention)
                 client_info = extraction_result["client_info"]
                 client = self.create_client(client_info)
                 client_id = client["client_id"]
-                logger.info(f"Created new client: {client['client_name']} (ID: {client_id})")
+                
+                if client.get("is_existing", False):
+                    logger.info(f"Using existing client (duplicate prevented): {client['client_name']} (ID: {client_id})")
+                else:
+                    logger.info(f"Created new client: {client['client_name']} (ID: {client_id})")
             else:
-                logger.info(f"Using existing client: {client_mapping_result['matched_client_name']} (ID: {client_id})")
+                logger.info(f"Using existing client (matched by mapping): {client_mapping_result['matched_client_name']} (ID: {client_id})")
             
             # Create contract
             contract = self.create_contract(extraction_result, client_id, document_path)

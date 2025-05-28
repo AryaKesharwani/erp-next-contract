@@ -9,12 +9,16 @@ import logging
 import json
 from datetime import datetime
 import os
+from colorama import Fore, Style, init
 
 from fuzzywuzzy import fuzz, process
 
 from src.utils.config import Config
 from src.utils.helpers import save_json, ensure_directory_exists
 from src.erpnext_integration.api import ERPNextAPI
+
+# Initialize colorama
+init()
 
 # Logger setup
 logger = logging.getLogger("contract_agent.client_mapping")
@@ -44,11 +48,11 @@ class ClientMapper:
         if (self.client_cache is not None and 
             self.client_cache_timestamp is not None and 
             current_time - self.client_cache_timestamp < self.cache_ttl):
-            logger.debug("Using cached client list")
+            logger.debug(f"{Fore.BLUE}Using cached client list{Style.RESET_ALL}")
             return self.client_cache
         
         # Otherwise, fetch from ERPNext
-        logger.info("Fetching client list from ERPNext")
+        logger.info(f"{Fore.CYAN}Fetching client list from ERPNext{Style.RESET_ALL}")
         clients = self.erpnext_api.get_clients()
         
         # Update cache
@@ -119,7 +123,7 @@ class ClientMapper:
         existing_clients = self._get_clients()
         
         if not existing_clients:
-            logger.warning("No existing clients found, suggesting to create new client")
+            logger.warning(f"{Fore.YELLOW}No existing clients found, suggesting to create new client{Style.RESET_ALL}")
             return {
                 "matched_client_id": None,
                 "matched_client_name": None,
@@ -226,6 +230,11 @@ class ClientMapper:
                 "confidence_score": normalized_score if best_match else 0.0,
                 "recommendation": "CREATE_NEW_CLIENT",
                 "suggested_client_name": primary_name,
+                "best_potential_match": {
+                    "client_id": best_client_id,
+                    "client_name": best_client_name,
+                    "confidence_score": normalized_score
+                } if best_match else None,
                 "alternative_matches": sorted(
                     alternative_matches, 
                     key=lambda x: x["confidence_score"], 
@@ -244,7 +253,7 @@ class ClientMapper:
             dict: Mapping result
         """
         try:
-            logger.info(f"Mapping client: {client_info['primary_name']}")
+            logger.info(f"{Fore.GREEN}Mapping client: {client_info['primary_name']}{Style.RESET_ALL}")
             
             # Perform client matching
             mapping_result = self._match_client(client_info)
@@ -260,12 +269,22 @@ class ClientMapper:
             
             # Log mapping result
             if mapping_result.get("matched_client_id"):
-                logger.info(f"Mapped client '{client_info['primary_name']}' to '{mapping_result['matched_client_name']}' with confidence {mapping_result['confidence_score']}")
+                logger.info(f"{Fore.GREEN}Mapped client '{client_info['primary_name']}' to '{mapping_result['matched_client_name']}' with confidence {mapping_result['confidence_score']:.2f}{Style.RESET_ALL}")
             else:
-                logger.info(f"No mapping found for client '{client_info['primary_name']}', suggesting to create new client")
+                # Log potential matches for manual review
+                potential_match = mapping_result.get("best_potential_match")
+                if potential_match and potential_match["confidence_score"] > 0.5:
+                    logger.warning(f"{Fore.YELLOW}No mapping found for client '{client_info['primary_name']}' (will create new), but found potential match: '{potential_match['client_name']}' with confidence {potential_match['confidence_score']:.2f}{Style.RESET_ALL}")
+                else:
+                    logger.info(f"{Fore.YELLOW}No mapping found for client '{client_info['primary_name']}', will create new client{Style.RESET_ALL}")
+                
+                # Log alternative matches if any
+                alternatives = mapping_result.get("alternative_matches", [])
+                if alternatives:
+                    logger.info(f"{Fore.CYAN}Alternative matches found: {', '.join([f'{alt['client_name']} ({alt['confidence_score']:.2f})' for alt in alternatives[:3]])}{Style.RESET_ALL}")
             
             return mapping_result
             
         except Exception as e:
-            logger.error(f"Error mapping client {client_info.get('primary_name', 'unknown')}: {str(e)}")
-            raise 
+            logger.error(f"{Fore.RED}Error mapping client {client_info.get('primary_name', 'unknown')}: {str(e)}{Style.RESET_ALL}")
+            raise
